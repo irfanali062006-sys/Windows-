@@ -1,0 +1,69 @@
+
+      - name: Show System Hardware and Storage
+        shell: pwsh
+        run: |
+          Write-Host ""
+          Write-Host "=========================================="
+          Write-Host "       RDP SYSTEM HARDWARE REPORT"
+          Write-Host "=========================================="
+
+          # CPU information
+          $cpu = Get-CimInstance Win32_Processor
+          Write-Host "`n--- CPU ---"
+          $cpu | Select-Object Name,
+            NumberOfCores,
+            NumberOfLogicalProcessors |
+            Format-List | Out-String | Write-Host
+
+          # RAM information
+          $os = Get-CimInstance Win32_OperatingSystem
+          $ram = Get-CimInstance Win32_ComputerSystem
+
+          Write-Host "--- RAM ---"
+          Write-Host ("Total RAM: {0:N2} GB" -f
+            ($ram.TotalPhysicalMemory / 1GB))
+          Write-Host ("Available RAM: {0:N2} GB" -f
+            ($os.FreePhysicalMemory / 1MB))
+
+          # Windows and system details
+          Write-Host "`n--- SYSTEM ---"
+          Write-Host "Computer: $env:COMPUTERNAME"
+          Write-Host "Windows: $($os.Caption)"
+          Write-Host "Version: $($os.Version)"
+          Write-Host "Architecture: $env:PROCESSOR_ARCHITECTURE"
+
+          # All local disk drives
+          Write-Host "`n--- STORAGE / DISKS ---"
+          Get-CimInstance Win32_LogicalDisk |
+            Where-Object { $_.DriveType -eq 3 } |
+            ForEach-Object {
+              $total = $_.Size / 1GB
+              $free = $_.FreeSpace / 1GB
+              $used = $total - $free
+              $percent = if ($total -gt 0) {
+                ($used / $total) * 100
+              } else { 0 }
+
+              Write-Host "Drive: $($_.DeviceID)"
+              Write-Host ("Total: {0:N2} GB" -f $total)
+              Write-Host ("Used: {0:N2} GB" -f $used)
+              Write-Host ("Free: {0:N2} GB" -f $free)
+              Write-Host ("Used: {0:N1}%" -f $percent)
+              Write-Host "------------------------------"
+            }
+
+          # GPU information, when available
+          Write-Host "`n--- GPU ---"
+          Get-CimInstance Win32_VideoController |
+            Select-Object Name,
+              @{Name="VRAM_GB"; Expression={
+                if ($_.AdapterRAM) {
+                  [math]::Round($_.AdapterRAM / 1GB, 2)
+                } else { "Unknown" }
+              }} |
+            Format-Table -AutoSize
+
+          Write-Host "`n=========================================="
+          Write-Host "       HARDWARE REPORT COMPLETE"
+          Write-Host "=========================================="
+          
