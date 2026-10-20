@@ -2,12 +2,13 @@ name: RDP Hardware Runner
 
 on:
   push:
-    branches: [ "main" ]
+    branches: ["main"]
   workflow_dispatch:
 
 jobs:
   build:
     runs-on: windows-latest
+    timeout-minutes: 360
 
     steps:
       - name: Check out repository
@@ -23,47 +24,78 @@ jobs:
 
           # CPU Details
           $cpu = Get-CimInstance Win32_Processor
+
           Write-Host "`n--- CPU DETAILS ---"
-          $cpu | Select-Object Name, NumberOfCores, NumberOfLogicalProcessors | Format-List | Out-String | Write-Host
+          $cpu |
+            Select-Object Name, NumberOfCores, NumberOfLogicalProcessors |
+            Format-List |
+            Out-String |
+            Write-Host
 
           # RAM Details
           $os = Get-CimInstance Win32_OperatingSystem
-          $ram = Get-CimInstance Win32_ComputerSystem$totalRamGB = $ram.TotalPhysicalMemory / 1GB$freeRamGB = $os.FreePhysicalMemory / 1MB$usedRamGB = $totalRamGB -$freeRamGB
-          $ramUsedPercent = if ($totalRamGB -gt 0) { ($usedRamGB / $totalRamGB) * 100 } else { 0 }
+          $ram = Get-CimInstance Win32_ComputerSystem
 
-          Write-Host "--- RAM DETAILS ---"
+          $totalRamGB = $ram.TotalPhysicalMemory / 1GB
+          $freeRamGB = $os.FreePhysicalMemory / 1MB
+          $usedRamGB = $totalRamGB - $freeRamGB
+
+          $ramUsedPercent = if ($totalRamGB -gt 0) {
+            ($usedRamGB / $totalRamGB) * 100
+          } else {
+            0
+          }
+
+          Write-Host "`n--- RAM DETAILS ---"
           Write-Host ("Total RAM     : {0:N2} GB" -f $totalRamGB)
-          Write-Host ("Used RAM      : {0:N2} GB ({1:N1}%)" -f $usedRamGB,$ramUsedPercent)
+          Write-Host ("Used RAM      : {0:N2} GB ({1:N1}%)" -f $usedRamGB, $ramUsedPercent)
           Write-Host ("Available RAM : {0:N2} GB" -f $freeRamGB)
 
           # System Details
           Write-Host "`n--- SYSTEM DETAILS ---"
-          Write-Host "Computer    : $env:COMPUTERNAME"
-          Write-Host "Windows     : $($os.Caption)"
-          Write-Host "Version     : $($os.Version)"
-          Write-Host "Architecture: $env:PROCESSOR_ARCHITECTURE"
+          Write-Host "Computer     : $env:COMPUTERNAME"
+          Write-Host "Windows      : $($os.Caption)"
+          Write-Host "Version      : $($os.Version)"
+          Write-Host "Architecture : $env:PROCESSOR_ARCHITECTURE"
 
           # Storage / Disks
           Write-Host "`n--- STORAGE / DISKS ---"
-          Get-CimInstance Win32_LogicalDisk | Where-Object { $_.DriveType -eq 3 } \vert{} ForEach-Object {$total = $_.Size / 1GB$free = $_.FreeSpace / 1GB$used = $total -$free
+
+          Get-CimInstance Win32_LogicalDisk |
+            Where-Object { $_.DriveType -eq 3 } |
+            ForEach-Object {
+              $total = $_.Size / 1GB
+              $free = $_.FreeSpace / 1GB
+              $used = $total - $free
+
               $percent = if ($total -gt 0) {
                 ($used / $total) * 100
-              } else { 0 }
+              } else {
+                0
+              }
 
-              Write-Host "Drive: $($_.DeviceID)"
+              Write-Host "`nDrive: $($_.DeviceID)"
               Write-Host ("Total: {0:N2} GB" -f $total)
-              Write-Host ("Used : {0:N2} GB ({1:N1}%)" -f $used,$percent)
+              Write-Host ("Used : {0:N2} GB ({1:N1}%)" -f $used, $percent)
               Write-Host ("Free : {0:N2} GB" -f $free)
               Write-Host "------------------------------"
-          }
+            }
 
           # GPU Details
           Write-Host "`n--- GPU DETAILS ---"
-          Get-CimInstance Win32_VideoController | Select-Object Name, @{Name="VRAM_GB"; Expression={
-              if ($_.AdapterRAM) {
-                [math]::Round($_.AdapterRAM / 1GB, 2)
-              } else { "Unknown" }
-          }} | Format-Table -AutoSize
+
+          Get-CimInstance Win32_VideoController |
+            Select-Object Name, @{
+              Name = "VRAM_GB"
+              Expression = {
+                if ($null -ne $_.AdapterRAM -and $_.AdapterRAM -gt 0) {
+                  [math]::Round($_.AdapterRAM / 1GB, 2)
+                } else {
+                  "Unknown"
+                }
+              }
+            } |
+            Format-Table -AutoSize
 
           Write-Host "`n=========================================="
           Write-Host "       HARDWARE REPORT COMPLETE"
